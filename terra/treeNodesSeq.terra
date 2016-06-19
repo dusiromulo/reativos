@@ -1,0 +1,59 @@
+#include "/home/terra/TerraNG/terra/TerraNet.defs"
+
+#define MSG_TYPE_SETUP 0
+#define MSG_TYPE_SEND_TEMP 1
+
+pktype myMsg from radioMsg with
+	var ubyte[4] d8;
+	var ushort[4] d16;
+	var ulong[2]  d32;
+end
+
+var ushort thisParent = 0;
+var ushort thisID = getNodeId();
+
+if thisID == 11 then
+	thisParent = 1;
+else
+	var myMsg receivedSetupMsg;
+	receivedSetupMsg = await RECEIVE(MSG_TYPE_SETUP);
+	thisParent = receivedSetupMsg.source;
+end
+
+var myMsg sendSetupMsg;
+sendSetupMsg.type = MSG_TYPE_SETUP;
+sendSetupMsg.target = BROADCAST;
+sendSetupMsg.source = thisID;
+
+emit SEND(sendSetupMsg);
+await SEND_DONE;
+
+par do
+	loop do
+		var myMsg receivedTempMsg;
+		receivedTempMsg = await RECEIVE(MSG_TYPE_SEND_TEMP);
+		receivedTempMsg.target = thisParent;
+		
+		emit SEND(receivedTempMsg);
+		await SEND_DONE;
+	end
+with
+	var ushort tempCount = 0;
+	loop do
+		await 3s;
+		var myMsg sendTempMsg;
+
+		emit REQ_TEMP();
+		sendTempMsg.type = MSG_TYPE_SEND_TEMP;
+		sendTempMsg.d16[0] = tempCount;
+		sendTempMsg.d16[1] = await TEMP;
+
+		sendTempMsg.source = thisID;
+		sendTempMsg.target = thisParent;
+
+		emit SEND(sendTempMsg);
+		await SEND_DONE;
+
+		inc tempCount;
+	end
+end
